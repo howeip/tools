@@ -31,7 +31,7 @@ def main():
     
     harden_name = para_list[1]
 
-    mem_reference_path = "/project/sky/user/wuming/mem/mem_reference_table.xlsx"
+    mem_reference_path = "/project/sdr/user/wuming/mem/mem_reference_table.xlsx"
 
     
     excel_file = pd.ExcelFile(mem_excel_path)
@@ -57,7 +57,7 @@ def main():
             
                         
             # Read mem sheet
-            mem_type,depth,width,mux,bank,bit_write,power_gating,rom_file,vt,device = read_excel(mem_excel_path,excel_file,sheet)
+            mem_type,depth,width,mux,bank,bit_write,power_gating,rom_file,vt,device,clock_gating,redundancy = read_excel(mem_excel_path,excel_file,sheet)
             
 
 
@@ -65,7 +65,7 @@ def main():
                 if math.isnan(depth[i]) != True and math.isnan(width[i]) != True and math.isnan(mux[i]) != True and math.isnan(bank[i]) != True :
 
                     mem_param_is_new = 0
-                    mem_param = {str(mem_type[i])+'        depth:'+str(depth[i])+'        width:'+str(width[i])+'        bit_write:'+str(bit_write[i])+'        power_gating:'+str(power_gating[i])}
+                    mem_param = {str(mem_type[i])+'        depth:'+str(depth[i])+'        width:'+str(width[i])+'        bit_write:'+str(bit_write[i])+'        power_gating:'+str(power_gating[i]) +'        redundancy:'+str(redundancy[i]) }
                     mem_param_is_new = check_param_in_log(sheet,mem_param)
                         
                     if int(depth[i]) != 0 :
@@ -101,20 +101,20 @@ def main():
                         #read mem signal reference sheet
                             param,model_signal,signal_width,top_signal,in_out = read_mem_reference(mem_type[i],mem_reference_path)
                             #initial_verilog_file(sheet,mem_type[i],depth[i],width[i],bit_write[i],power_gating[i],param,model_signal,signal_width,top_signal,in_out,mux[i],bank[i])
-                            initial_verilog_file(sheet,mem_type[i],depth[i],width[i],bit_write[i],power_gating[i],param,model_signal,signal_width,top_signal,in_out,mux[i],bank[i],vt_index,device_index)
+                            initial_verilog_file(sheet,mem_type[i],depth[i],width[i],bit_write[i],power_gating[i],param,model_signal,signal_width,top_signal,in_out,mux[i],bank[i],vt_index,device_index,clock_gating[i],redundancy[i])
                         if "asfifo(asynchronous)" in mem_type[i] :
                             param,model_signal,signal_width,top_signal,in_out = read_mem_reference("tpram(asynchronous)",mem_reference_path)
-                            initial_verilog_file(sheet,"tpram(asynchronous)",depth[i],width[i],bit_write[i],power_gating[i],param,model_signal,signal_width,top_signal,in_out,mux[i],bank[i],vt_index,device_index)
-                            asfifo_wrapper(sheet,depth[i],width[i],bit_write[i],power_gating[i],vt_index,device_index)
+                            initial_verilog_file(sheet,"tpram(asynchronous)",depth[i],width[i],bit_write[i],power_gating[i],param,model_signal,signal_width,top_signal,in_out,mux[i],bank[i],vt_index,device_index,clock_gating[i],redundancy[i])
+                            asfifo_wrapper(sheet,depth[i],width[i],bit_write[i],power_gating[i],vt_index,device_index,clock_gating[i])
                         if "sfifo(synchronous)" in mem_type[i] :
                             param,model_signal,signal_width,top_signal,in_out = read_mem_reference("tpram(synchronous)",mem_reference_path)
-                            initial_verilog_file(sheet,"tpram(synchronous)",depth[i],width[i],bit_write[i],power_gating[i],param,model_signal,signal_width,top_signal,in_out,mux[i],bank[i],vt_index,device_index)
-                            sfifo_wrapper(sheet,depth[i],width[i],bit_write[i],power_gating[i],vt_index,device_index)
+                            initial_verilog_file(sheet,"tpram(synchronous)",depth[i],width[i],bit_write[i],power_gating[i],param,model_signal,signal_width,top_signal,in_out,mux[i],bank[i],vt_index,device_index,clock_gating[i],redundancy[i])
+                            sfifo_wrapper(sheet,depth[i],width[i],bit_write[i],power_gating[i],vt_index,device_index,clock_gating[i])
                         if "rom" in mem_type[i] :
                             param,model_signal,signal_width,top_signal,in_out = read_mem_reference(mem_type[i],mem_reference_path)
                             rom_name = rom_file[i].split('/')[-1]
                             rom_name = rom_name.split('.')[0]
-                            rom_wrapper(sheet, depth[i], width[i],str(rom_name) , param,model_signal,signal_width,top_signal,in_out)
+                            rom_wrapper(sheet, depth[i], width[i],str(rom_name) , param,model_signal,signal_width,top_signal,in_out,clock_gating[i])
                
                
         
@@ -134,6 +134,8 @@ def read_excel(mem_excel_path,excel_file,sheet):
     rom_file = df['init txt初始化文件'].values
     vt = df['multi-Vt Selection'].values
     device = df['Suggested Device'].values
+    clock_gating = df['ClockGating'].values
+    redundancy = df['Redundancy'].values
 
     columns = df.columns.tolist()
     if "PowerGating" in columns :
@@ -143,7 +145,7 @@ def read_excel(mem_excel_path,excel_file,sheet):
         for i in range(length) :
             power_gating.append('ON')
 
-    return mem_type,depth,width,mux,bank,bit_write,power_gating,rom_file,vt,device
+    return mem_type,depth,width,mux,bank,bit_write,power_gating,rom_file,vt,device,clock_gating,redundancy
 
 
 def check_param_in_log(sheet,mem_param) :
@@ -193,7 +195,7 @@ def read_mem_reference(mem_type,mem_reference_path) :
 
 #ram verilog {{{
 
-def initial_verilog_file(sheet,mem_type,depth,width,bit_write,power_gating,param,model_signal,signal_width,top_signal,in_out,mux,bank,vt_index,device_index):
+def initial_verilog_file(sheet,mem_type,depth,width,bit_write,power_gating,param,model_signal,signal_width,top_signal,in_out,mux,bank,vt_index,device_index,clock_gating,redundancy):
    
     width = int(width)
     depth = int(depth)
@@ -226,13 +228,25 @@ def initial_verilog_file(sheet,mem_type,depth,width,bit_write,power_gating,param
         model_name = model_name + 'p1'
     else :
         model_name = model_name + 'p0'
+    
+    model_name = model_name + vt_index
+
+    if 'ON' in str(redundancy):
+        model_name = model_name + "_repair"
+
+    model_name = model_name + "_" + device_index
+
 
     if 'OFF' in str(bit_write) and 'OFF' in str(power_gating) :
-        model_name = model_name +  vt_index + "_" + device_index
         mem_name = mem_name +  vt_index + "_" + device_index
     else :
-        model_name = model_name +  vt_index + "_" + device_index
         mem_name = mem_name + "_" + vt_index + "_" + device_index
+
+    if 'ON' in str(redundancy):
+        mem_name = mem_name + "_repair"
+
+    if 'OFF' not in str(clock_gating):
+        mem_name = mem_name + "_cg"
 
 
     wrap_name = mem_name + '_wrap'
@@ -251,15 +265,31 @@ def initial_verilog_file(sheet,mem_type,depth,width,bit_write,power_gating,param
         print_line.append('\tinput                \tme          \t,')
         print_line.append('\tinput    [' + str(int(addr_width)-1) + ':0]      \taddr        \t,')
         print_line.append('\tinput    [' + str(width-1) + ':0]      \tdin          \t,')
-        print_line.append('\tinput                \tlight_sleep \t,')
+        print_line.append('\tinput                \tret1n       \t,')
         if 'ON' in str(power_gating) :
-            print_line.append('\toutput               \trop         \t,')
-            print_line.append('\tinput                \tdeep_sleep   \t,')
-            print_line.append('\tinput                \tshut_down   \t,')
+            print_line.append('\toutput               \tprdyn       \t,')
+            print_line.append('\tinput                \tret2n       \t,')
+            print_line.append('\tinput                \tpgen        \t,')
+        if 'OFF' not in str(clock_gating) :
+            print_line.append('\tinput                \ticg_test_mode     \t,')
         if 'ON' in str(bit_write) :
             print_line.append('\tinput    [' + str(width-1) + ':0]      \twem           \t,')
         print_line.append('\tinput                \twe        \t')
         print_line.append(');\n\n')
+
+        if 'OFF' in str(clock_gating) :
+            print_line.append('\twire               clk_g;\n\n')
+            print_line.append('\tassign             clk_g = clk;\n\n')
+
+        if 'OFF' not in str(clock_gating) :
+            print_line.append('\twire               clk_g;\n\n')
+            print_line.append('\ticg u_icg(')
+            print_line.append('\t\t.clkin                      (clk    ),')
+            print_line.append('\t\t.enable                     (me     ),')
+            print_line.append('\t\t.icg_test_mode              (icg_test_mode),')
+            print_line.append('\t\t.clkout                     (clk_g  ) ')
+            print_line.append('\t);\n\n')
+
 
         print_line.append('`ifdef NO_ASIC_MEM\n')       
         print_line.append('\tspram_regfile ')
@@ -272,7 +302,7 @@ def initial_verilog_file(sheet,mem_type,depth,width,bit_write,power_gating,param
             print_line.append('\t\t.MASK_BIT_WIDTH         ('+str(int(width))+'         \t) ')
         print_line.append('\t)')
         print_line.append('\tu_'+ mem_name+'_wrap(')
-        print_line.append('\t\t.clk                    (clk                           \t), //input')
+        print_line.append('\t\t.clk                    (clk_g                         \t), //input')
         print_line.append('\t\t.me                     (me                            \t), //input')
         print_line.append('\t\t.addr                   (addr['+str(int(addr_width)-1)+':0]                  \t), //input')
         print_line.append('\t\t.we                     (we                            \t), //input')
@@ -294,25 +324,62 @@ def initial_verilog_file(sheet,mem_type,depth,width,bit_write,power_gating,param
             print_line.append('\tinput               \tclkb         \t,')
         elif 'synchronous' in mem_type :
             print_line.append('\tinput               \tclk          \t,')
+        if 'OFF' not in str(clock_gating) :
+            print_line.append('\tinput                \ticg_test_mode     \t,')
         print_line.append('\tinput               \tenb          \t,')
         print_line.append('\tinput    [' + str(int(addr_width)-1) + ':0]      \taddrb         \t,')
         print_line.append('\tinput               \tena          \t,')
         print_line.append('\tinput    [' + str(int(addr_width)-1) + ':0]      \taddra         \t,')
         print_line.append('\tinput    [' + str(width-1) + ':0]      \tdina        \t,')
         if 'ON' in str(power_gating) :
-            print_line.append('\toutput              \trop            \t,')
-            print_line.append('\tinput               \tdeep_sleep     \t,')
-            print_line.append('\tinput               \tshut_down      \t,')
+            print_line.append('\toutput              \tprdyn          \t,')
+            print_line.append('\tinput               \tret2n     \t,')
+            print_line.append('\tinput               \tpgen      \t,')
         if 'ON' in str(bit_write) :
             print_line.append('\tinput    [' + str(width-1) + ':0]         \twem      \t,')
-        print_line.append('\tinput               \tlight_sleep ')
+        print_line.append('\tinput               \tret1n    ')
         print_line.append(');\n\n')
+
+        if 'OFF' in str(clock_gating) :
+            print_line.append('\twire               clka_g;\n\n')
+            print_line.append('\twire               clkb_g;\n\n')
+            if 'asynchronous' in mem_type :
+                print_line.append('\tassign             clka_g = clka;\n\n')
+                print_line.append('\tassign             clkb_g = clkb;\n\n')
+            else :
+                print_line.append('\tassign             clka_g = clk;\n\n')
+                print_line.append('\tassign             clkb_g = clk;\n\n')
+
+
+        if 'OFF' not in str(clock_gating) :
+            print_line.append('\twire               clka_g;')
+            print_line.append('\twire               clkb_g;\n\n')
+            print_line.append('\ticg u_icg_clka(')
+            if 'asynchronous' in mem_type :
+                print_line.append('\t\t.clkin                      (clka    ),')
+            else :
+                print_line.append('\t\t.clkin                      (clk     ),')
+            print_line.append('\t\t.enable                     (ena    ),')
+            print_line.append('\t\t.icg_test_mode              (icg_test_mode),')
+            print_line.append('\t\t.clkout                     (clka_g ) ')
+            print_line.append('\t);\n\n')
+
+            print_line.append('\ticg u_icg_clkb(')
+            if 'asynchronous' in mem_type :
+                print_line.append('\t\t.clkin                      (clkb    ),')
+            else :
+                print_line.append('\t\t.clkin                      (clk     ),')
+            print_line.append('\t\t.enable                     (enb    ),')
+            print_line.append('\t\t.icg_test_mode              (icg_test_mode),')
+            print_line.append('\t\t.clkout                     (clkb_g ) ')
+            print_line.append('\t);\n\n')
+
 
         
         print_line.append('`ifdef NO_ASIC_MEM\n')
 
         if 'ON' in str(power_gating) :
-             print_line.append("\tassign             rop = 1'b1    ;\n")
+             print_line.append("\tassign             rop = 1'b0    ;\n")
         print_line.append('\twire               we          ;')
         print_line.append('\tassign             we = ena    ;\n')
         
@@ -326,12 +393,8 @@ def initial_verilog_file(sheet,mem_type,depth,width,bit_write,power_gating,param
             print_line.append('\t\t.MASK_BIT_WIDTH         ('+str(int(width))+'    \t\t) ')
         print_line.append('\t)')
         print_line.append('\tu_'+mem_name+'_reg(')
-        if 'asynchronous' in mem_type :
-            print_line.append('\t\t.clka                   (clka                    \t), //input')
-            print_line.append('\t\t.clkb                   (clkb                    \t), //input')
-        else :
-            print_line.append('\t\t.clka                   (clk                     \t), //input')
-            print_line.append('\t\t.clkb                   (clk                     \t), //input')
+        print_line.append('\t\t.clka                   (clka_g                  \t), //input')
+        print_line.append('\t\t.clkb                   (clkb_g                  \t), //input')
         print_line.append('\t\t.mea                    (ena                     \t), //input')
         print_line.append('\t\t.meb                    (enb                     \t), //input')
         print_line.append('\t\t.addr_a                 (addra['+str(int(addr_width)-1)+':0]             \t), //input')
@@ -347,13 +410,23 @@ def initial_verilog_file(sheet,mem_type,depth,width,bit_write,power_gating,param
     
     print_line.append('`else\n')
 
-    if 'ON' in str(power_gating) :
-        print_line.append('\twire                     prdyn     ;')
+
 
     print_line.append('\twire     [31:0]          mem_ctrl  ;\n\n')
 
-    if 'ON' in str(power_gating) :
-        print_line.append('\tassign   rop   =   ~prdyn          ;')
+
+    if 'ON' in str(redundancy) :
+        print_line.append('\twire     ['+str(int(addr_width)-1)+':0]          TA  ;\n\n')
+        print_line.append('\twire     ['+str(int(width)-1)+':0]          TD  ;\n\n')
+        
+        print_line.append('\tassign   TA = '+str(int(addr_width))+"'b0;\n\n")
+        print_line.append('\tassign   TD = '+str(int(width))+"'b0;\n\n")
+        
+        if 'ON' in str(bit_write) :
+            print_line.append('\twire     ['+str(int(width)-1)+':0]          TWEN  ;\n\n')
+            print_line.append('\tassign   TWEN = '+str(int(width))+"'b0;\n\n")
+
+
 
     print_line.append('\tassign   mem_ctrl[31:0]  =   ' + mem_name + '_mem_ctrl;\n\n') 
 
@@ -390,6 +463,12 @@ def initial_verilog_file(sheet,mem_type,depth,width,bit_write,power_gating,param
                 print_line.append(print_verilog(model_signal[i],signal_width[i],top_signal[i],str(int(width)-1),str(int(addr_width)-1),in_out[i],0))
         else :
             if 'p0' in str(param[i]) :
+                print_line.append(print_verilog(model_signal[i],signal_width[i],top_signal[i],str(int(width)-1),str(int(addr_width)-1),in_out[i],0))
+        if 'ON' in str(redundancy) :
+            if 'r1' in str(param[i]) :
+                print_line.append(print_verilog(model_signal[i],signal_width[i],top_signal[i],str(int(width)-1),str(int(addr_width)-1),in_out[i],0))
+        if 'ON' in str(bit_write) and 'ON' in str(redundancy) :
+            if 'rw' in str(param[i]) :
                 print_line.append(print_verilog(model_signal[i],signal_width[i],top_signal[i],str(int(width)-1),str(int(addr_width)-1),in_out[i],0))
     if "spram" in mem_type :
         print_line.append('		.RAWLM			(mem_ctrl[8:7]     	)')
@@ -452,7 +531,7 @@ def print_verilog(model_signal,signal_width,top_signal,width,addr_width,in_out,l
 
 #gen_sfifo_wrap{{{
 
-def sfifo_wrapper(sheet,depth,width,bit_write,power_gating,vt_index,device_index) :
+def sfifo_wrapper(sheet,depth,width,bit_write,power_gating,vt_index,device_index,clock_gating) :
 
     depth = int(depth)
     width = int(width)
@@ -479,6 +558,9 @@ def sfifo_wrapper(sheet,depth,width,bit_write,power_gating,vt_index,device_index
     else :
         tpram_name = tpram_name + "_" + vt_index + "_" + device_index
 
+    if 'OFF' not in str(clock_gating):
+        tpram_name = tpram_name + "_cg"
+
     fp = open(module_name+'.v', "w")
      
     print_line = []
@@ -503,11 +585,13 @@ def sfifo_wrapper(sheet,depth,width,bit_write,power_gating,vt_index,device_index
     print_line.append('\t)')
     print_line.append('\t(')
     print_line.append("\tinput      [31:0]          "+tpram_name+"_mem_ctrl,")
-    print_line.append('\tinput                      light_sleep,')
+    print_line.append('\tinput                      ret1n,')
+    if 'OFF' not in str(clock_gating):
+        print_line.append('\tinput                      icg_test_mode,')
     if 'ON' in str(power_gating):
-        print_line.append('\tinput                      deep_sleep,')
-        print_line.append('\tinput                      shut_down,')
-        print_line.append('\toutput                     rop,')             
+        print_line.append('\tinput                      ret2n,')
+        print_line.append('\tinput                      pgen,')
+        print_line.append('\toutput                     prdyn,')             
     print_line.append('\tinput                      clk,')
     print_line.append('\tinput                      rst_n ,')
     print_line.append('\tinput                      srst,')
@@ -576,11 +660,13 @@ def sfifo_wrapper(sheet,depth,width,bit_write,power_gating,vt_index,device_index
     print_line.append('    .ena                    (wea                            ), //input')
     print_line.append('    .addrb                  (addrb[ADDR_WIDTH-1:0]          ), //input')
     print_line.append('    .enb                    (enb                            ), //input')
-    print_line.append('    .light_sleep             (light_sleep                    ), //input')
+    print_line.append('    .ret1n                  (ret1n                          ), //input')
+    if 'OFF' not in str(clock_gating):
+        print_line.append('    .icg_test_mode                 (icg_test_mode                        ), //input')
     if 'ON' in str(power_gating):
-        print_line.append('    .deep_sleep              (deep_sleep                     ), //input')
-        print_line.append('    .shut_down               (shut_down                      ), //input')
-        print_line.append('    .rop                     (rop                            ), //output')
+        print_line.append('    .ret2n                   (ret2n                          ), //input')
+        print_line.append('    .pgen                    (pgen                           ), //input')
+        print_line.append('    .prdyn                   (prdyn                            ), //output')
     if 'ON' in str(bit_write) :
         print_line.append('    .wem                     (~' + str(width) + "'b0                     ), //input")
     print_line.append('    .clk                    (clk                            )  //input')
@@ -626,6 +712,9 @@ def asfifo_wrapper(sheet,depth,width,bit_write,power_gating,vt_index,device_inde
     else :
         tpram_name = tpram_name + "_" + vt_index + "_" + device_index
 
+    if 'OFF' not in str(clock_gating):
+        tpram_name = tpram_name + "_cg"
+
     mem_ctrl = tpram_name + "_mem_ctrl"
 
     fp = open(sheet + "/" + module_name+'.v', "w")
@@ -652,11 +741,13 @@ def asfifo_wrapper(sheet,depth,width,bit_write,power_gating,vt_index,device_inde
     print_line.append('\t)')
     print_line.append('\t(')
     print_line.append('\tinput      [31:0]          '+mem_ctrl+',')
-    print_line.append('\tinput                      light_sleep,')
+    print_line.append('\tinput                      ret1n,')
+    if 'OFF' not in str(clock_gating):
+        print_line.append('\tinput                      icg_test_mode,')
     if 'ON' in str(power_gating):
-        print_line.append('\tinput                      deep_sleep,')
-        print_line.append('\tinput                      shut_down,')
-        print_line.append('\toutput                     rop,')             
+        print_line.append('\tinput                      ret2n,')
+        print_line.append('\tinput                      pgen,')
+        print_line.append('\toutput                     prdyn,')             
     print_line.append('\tinput                      r_clk      ,')
     print_line.append('\tinput                      w_clk      ,')
     print_line.append('\tinput                      r_rst_n    ,   //async reset')
@@ -740,11 +831,13 @@ def asfifo_wrapper(sheet,depth,width,bit_write,power_gating,vt_index,device_inde
     print_line.append('    .ena                    (wea                            ), //input')
     print_line.append('    .addrb                  (addrb[ADDR_WIDTH-1:0]          ), //input')
     print_line.append('    .enb                    (enb                            ), //input')
-    print_line.append('    .light_sleep            (light_sleep                    ), //input')
+    print_line.append('    .ret1n                  (ret1n                          ), //input')
+    if 'OFF' not in str(clock_gating):
+        print_line.append('    .icg_test_mode                 (icg_test_mode                        ),')
     if 'ON' in str(power_gating):
-        print_line.append('    .deep_sleep              (deep_sleep                     ), //input')
-        print_line.append('    .shut_down               (shut_down                      ), //input')
-        print_line.append('    .rop                     (rop                            ), //output')
+        print_line.append('    .ret2n                   (ret2n                          ), //input')
+        print_line.append('    .pgen                    (pgen                           ), //input')
+        print_line.append('    .prdyn                   (prdyn                          ), //output')
     if 'ON' in str(bit_write) :
         print_line.append('    .wem                     (~' + str(width) + "'b0                     ), //input")
     print_line.append('    .clka                   (w_clk                          ),  //input')
@@ -764,7 +857,7 @@ def asfifo_wrapper(sheet,depth,width,bit_write,power_gating,vt_index,device_inde
 
 #rom_model {{{
 
-def rom_wrapper(sheet, depth, width, module_name, param,model_signal,signal_width,top_signal,in_out) :
+def rom_wrapper(sheet, depth, width, module_name, param,model_signal,signal_width,top_signal,in_out,clock_gating) :
     
     fp = open(module_name + "_wrap.v", "w")
 
@@ -775,18 +868,33 @@ def rom_wrapper(sheet, depth, width, module_name, param,model_signal,signal_widt
     
     print_line.append('module ' + module_name +'_wrap (')
     print_line.append("\tinput      [31:0]\t\t\t\t"+ module_name +"_mem_ctrl,")
-    print_line.append("\tinput          \t\t\t\t\tlight_sleep   \t,")
-    print_line.append('\tinput          \t\t\t\t\tshut_down   \t,')
+    if 'OFF' not in str(clock_gating) :
+        print_line.append("\tinput          \t\t\t\t\ticg_test_mode       \t,")
+#    print_line.append("\tinput          \t\t\t\t\tlight_sleep   \t,")
+    print_line.append('\tinput          \t\t\t\t\tpgen   \t,')
     print_line.append('\toutput     ['+str(int(width)-1)+':0]\t\t\t\tq              \t,')
     print_line.append('\tinput      ['+str(int(addr_width)-1)+':0]\t\t\t\taddr          \t,')
     print_line.append('\tinput            \t\t\t\tclk           \t,')
     print_line.append('\tinput            \t\t\t\tme')
     print_line.append(');\n\n')
-    
+  
+    if 'OFF' in str(clock_gating) :
+        print_line.append('\twire               clk_g;\n\n')
+        print_line.append('\tassign             clk_g = clk;\n\n')
+
+    if 'OFF' not in str(clock_gating) :
+        print_line.append('\twire               clk_g;\n\n')
+        print_line.append('\ticg u_icg(')
+        print_line.append('\t\t.clkin                      (clk    ),')
+        print_line.append('\t\t.enable                     (me     ),')
+        print_line.append('\t\t.icg_test_mode              (icg_test_mode),')
+        print_line.append('\t\t.clkout                     (clk_g  ) ')
+        print_line.append('\t);\n\n')
+
     print_line.append('`ifdef NO_ASIC_MEM\n') 
     print_line.append('\tsrom_regfile ')
     print_line.append('\t#(')
-    print_line.append('\t\t.PreloadFilename        ("/project/sky/tsmc22_lib/rom_bin_file/'+ module_name +'.bin"                ),')
+    print_line.append('\t\t.PreloadFilename        ("/project/sdr/tsmc22_lib/rom_bin_file/'+ module_name +'.bin"                ),')
     print_line.append('\t\t.DATA_DEPTH             ('+str(int(depth))+'                     \t),')
     print_line.append('\t\t.DATA_WIDTH             ('+str(int(width))+'                     \t),')
     print_line.append('\t\t.ADDR_WIDTH             ('+str(int(addr_width))+'                        \t) ')
@@ -795,7 +903,7 @@ def rom_wrapper(sheet, depth, width, module_name, param,model_signal,signal_widt
     print_line.append('\t\t.Q                      (q['+str(int(width-1))+':0]              \t\t), //output')
     print_line.append('\t\t.ADR                    (addr['+str(int(addr_width)-1)+':0]            \t\t), //input')
     print_line.append('\t\t.ME                     (me                   \t\t), //input')
-    print_line.append('\t\t.CLK                    (clk                  \t\t)  //input')
+    print_line.append('\t\t.CLK                    (clk_g                \t\t)  //input')
     print_line.append('\t);')
    
     print_line.append('\n\n`else\n')       
